@@ -1,0 +1,2 @@
+py-currency-converter==1.2.0
+aiogram==2.21
