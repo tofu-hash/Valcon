@@ -33,14 +33,13 @@ async def converter_msg_handler(msg: Message):
     # matches = re.findall(amount_regex, msg.text.lower())[0]
 
     # Ищу пары сумма валюта в тексте
-    currency_regex = r'(?P<amount>\d+(?:[,.]\d+)?(?:кк|kk|[kK]|[кК])?)\s*(?P<currency>' \
-                     r'USD|\$|руб?|uah?|rub?|бачей?|грн|грив(?:на|ен|ень)?|бак(?:с|сы)?|₽|usd)'
+    currency_regex = r'(?P<amount>\d+(?:[,.]\d*)?(?:кк|kk|[kK]|[кК])?)\s*(?P<currency>' \
+                                      r'руб?|uah?|rub?|бачей?|грн|евр|\€?|eur?|грив(?:на|ен|ень)?|бак(?:с|сы)?|\₽?|\$?|usd)'
     matches = re.findall(currency_regex, msg.text.lower())
-
     for match in matches:
 
         # Обрабатываю валюты. Получаю сумму и код валюты.
-        amount = match[0]
+        amount = match[0].replace(',', '.')
 
         # Умножаю на к/k
         if 'k' in amount or 'к' in amount:
@@ -58,7 +57,7 @@ async def converter_msg_handler(msg: Message):
         if not currency_code:
             currency_code = 'RUB'
 
-        raw_converted = convert(base=currency_code, amount=int(amount),
+        raw_converted = convert(base=currency_code, amount=amount,
                                 to=config.CURRENCIES.keys())
 
         # Округляю до двух чисел после запятой
