@@ -58,7 +58,7 @@ async def converter_msg_handler(msg: Message):
     # matches = re.findall(amount_regex, msg.text.lower())[0]
 
     # Ищу пары сумма валюта в тексте
-    currency_regex = r'(\d+(?:к|k|тыс)?)(?:\s*([^\d\s]+))?'
+    currency_regex = r'(\d+(?:\.\d+)?(?:к|k|тыс)?)(?:\s*([^\d\s]+))?'
 
     matches = re.findall(currency_regex, msg.text.lower())
 
