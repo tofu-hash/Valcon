@@ -1,63 +1,55 @@
 import aiogram.utils.exceptions
-from py_currency_converter import convert
-
+import re
 import config
 from handlers.init import *
-import re
+from aiogram.types import Message, Sticker
 
 
 async def delete_last_messages(msg: Message, count: int = 3):
     """Удаляет последние N сообщений до команды."""
-
     for i in range(0, count):
         try:
-            await bot.delete_message(chat_id=msg.from_user.id,
-                                     message_id=msg.message_id - i)
+            await bot.delete_message(chat_id=msg.from_user.id, message_id=msg.message_id - i)
         except aiogram.utils.exceptions.MessageToDeleteNotFound:
             pass
 
 
-async def start_cmd_handler(msg: Message, state: FSMContext):
+async def start_cmd_handler(msg: Message, state):
     await state.finish()
 
-    answer = ('💸 Напиши любую валюту '
-              'любым способом и я конвертирую её\n\n'
-              'P.S. Ты можешь написать любое выражение, '
-              'и я посчитаю его.\n'
-              'Примеры:\n'
-              '<b>2 + 2 => 4\n'
-              '(30 * 2) - (20 * 5) => -40</b>')
+    answer = """💸 Добро пожаловать! Я - твой персональный конвертер валют и калькулятор выражений *valcon*.
+
+📈 Для конвертации валюты напиши сумму и код валюты через пробел, например:
+• 100 USD
+• 2500 RUB
+• 50 EUR
+
+🔢 Чтобы посчитать выражение, просто напиши его, используя математические операции и числа. Например:
+• 2 + 2
+• (30 * 2) - (20 * 5)
+
+💰 Доступные валюты для конвертации:
+• USD - Доллар США
+• RUB - Российский рубль
+• UAH - Украинская гривна
+• EUR - Евро
+• TON - Криптовалюта TON
+• USDT - Криптовалюта USDT
+
+📝 Помни, что ты также можешь написать любое выражение и я посчитаю его для тебя.
+
+ℹ️ Более того, ты можешь использовать меня в инлайн-режиме, чтобы быстро конвертировать валюту или выполнить вычисления без необходимости открывать чат со мной. Просто упомяни мой никнейм @YourCurrencyBot в любом чате и укажи сумму и код валюты или выражение.
+
+Примеры использования в инлайн-режиме:
+• @val_con_bot 100 USD
+• @val_con_bot 50 биткоинов
+• @val_con_bot 2 + 2"""
 
     await msg.answer_sticker(sticker='CAACAgIAAxkBAAMKZCqF8NxyEdlQYjNX0uQ-kMCKBRsAAvINAAK7fWBIH8H7_ft7nyovBA')
-    await msg.answer(text=answer, parse_mode='markdown')
-
-
-def calculator(expression):
-    # Удаление пробелов из выражения
-    expression = expression.replace(" ", "")
-
-    # Проверка наличия запрещенных символов в выражении
-    if re.search(r"[^\d+\-*/().]", expression):
-        raise ValueError("Недопустимые символы в выражении.")
-
-    # Проверка сбалансированности скобок
-    if expression.count("(") != expression.count(")"):
-        raise ValueError("Несбалансированные скобки в выражении.")
-
-    # Вычисление значения выражения
-    try:
-        result = eval(expression)
-        return result
-    except:
-        raise ValueError("Некорректное выражение.")
+    await msg.answer(text=answer, parse_mode='html')
 
 
 async def converter_msg_handler(msg: Message):
-    # Ищу только суммы
-    # amount_regex = r'(?P<amount>\d+(?:[,.]\d+)?(?:кк|kk|[kK]|[кК])?)'
-    # matches = re.findall(amount_regex, msg.text.lower())[0]
-
-    # Ищу пары сумма валюта в тексте
     currency_regex = r'(\d+(?:\.\d+)?(?:к|k|тыс)?)(?:\s*([^\d\s]+))?'
 
     matches = re.findall(currency_regex, msg.text.lower())
@@ -76,9 +68,10 @@ async def converter_msg_handler(msg: Message):
             else:
                 amount = float(amount)
 
-            # Преобразовываю код валюты к нужному либе виду ($=USD, рубль=RUB)
+            # Преобразовываю код валюты к нужному виду ($=USD, рубль=RUB)
             currency = match[1]
             currency_code = ''
+
             for _currency in config.CURRENCIES:
                 if currency in config.CURRENCIES[_currency]:
                     currency_code = _currency
@@ -86,26 +79,35 @@ async def converter_msg_handler(msg: Message):
             if not currency_code:
                 currency_code = 'RUB'
 
-            raw_converted = convert(base=currency_code, amount=amount,
-                                    to=config.CURRENCIES.keys())
+            if currency_code in config.CRYPTOCURRENCIES:
+                crypto = cryptopay.Crypto(config.CRYPTOPAY_API_KEY, testnet=False)
+                exchange_rates = crypto.getExchangeRates()['result']
+                currency_rates = {}
 
-            # Округляю до двух чисел после запятой
-            converted = {}
-            for currency in raw_converted:
-                converted[currency] = round(raw_converted[currency], 2)
+                for rate in exchange_rates:
+                    if rate['source'] == currency_code and rate['target'] in config.CURRENCIES.keys():
+                        currency_rates[rate['target']] = round(float(rate['rate']) * amount, 2)
+                answer = f"{config.CRYPTOCURRENCIES_FLAGS[currency_code]} {amount} {currency_code}\n\n"
 
-            # Формирование ответа (главная валюта первая, а остальные - потом)
+                for _currency in config.CURRENCIES_FLAGS.keys():
+                    answer += f"{config.CURRENCIES_FLAGS[_currency]} {add_spaces(currency_rates[_currency])} {_currency}\n"
 
-            answer = '%s *%s %s*\n\n' % (config.CURRENCIES_FLAGS[currency_code],
-                                         converted[currency_code], currency_code)
+            else:
+                currencies = list(config.CURRENCIES.keys())[:4]
+                raw_converted = convert(base=currency_code, amount=amount,
+                                        to=currencies)
 
-            currencies = [i for i in config.CURRENCIES]
-            currencies.remove(currency_code)
+                converted = {}
+                for currency in raw_converted:
+                    converted[currency] = round(raw_converted[currency], 2)
 
-            for _currency in currencies:
-                answer += '%s *%s %s*\n' % (config.CURRENCIES_FLAGS[_currency],
-                                            converted[_currency], _currency)
-
+                # Формирование ответа (главная валюта первая, а остальные - потом)
+                answer = f"{config.CURRENCIES_FLAGS[currency_code]} {add_spaces(converted[currency_code])} {currency_code}\n\n"
+                currencies = [i for i in config.CURRENCIES][:4]
+                currencies.remove(currency_code)
+                for _currency in currencies:
+                    answer += f"{config.CURRENCIES_FLAGS[_currency]} {add_spaces(converted[_currency])} {_currency}\n"
+            answer = '*' + answer + '*'
             await msg.answer(text=answer, parse_mode='markdown')
 
 
